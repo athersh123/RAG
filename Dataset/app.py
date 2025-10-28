@@ -401,34 +401,44 @@ def get_stats():
 
 @app.route('/api/ask', methods=['POST'])
 def ask_question():
-    """Answer a medical question."""
+    """Answer a medical question - EVALUATION ENDPOINT."""
     if rag is None:
         return jsonify({'error': 'RAG system not initialized'}), 500
     
     try:
         data = request.json
-        question = data.get('question', '')
+        
+        # Support both 'query' (evaluation format) and 'question' (web UI format)
+        question = data.get('query') or data.get('question', '')
         top_k = data.get('top_k', 3)
         
         if not question:
-            return jsonify({'error': 'Question is required'}), 400
+            return jsonify({'error': 'Query/Question is required'}), 400
         
         # Get answer
         result = rag.answer_question(question, top_k=top_k)
         
-        # Format response
-        response = {
-            'question': question,
-            'answer': result['answer'],
-            'sources': [
-                {
-                    'book': s['book'],
-                    'similarity': s['similarity'],
-                    'text': s['text']
-                }
-                for s in result['sources'][:top_k]
-            ]
-        }
+        # Format response for evaluation (required format)
+        if 'query' in data:
+            # Evaluation format: {"answer": "string", "contexts": ["string", ...]}
+            response = {
+                'answer': result['answer'],
+                'contexts': [s['text'] for s in result['sources'][:top_k]]
+            }
+        else:
+            # Web UI format (original)
+            response = {
+                'question': question,
+                'answer': result['answer'],
+                'sources': [
+                    {
+                        'book': s['book'],
+                        'similarity': s['similarity'],
+                        'text': s['text']
+                    }
+                    for s in result['sources'][:top_k]
+                ]
+            }
         
         return jsonify(response)
         
