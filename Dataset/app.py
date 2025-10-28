@@ -170,10 +170,88 @@ def index():
     """Serve the web interface."""
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/api/ask', methods=['GET'])
+def ask_get():
+    """Handle GET requests to /api/ask with helpful information."""
+    return jsonify({
+        'error': 'Method Not Allowed',
+        'message': 'This endpoint only accepts POST requests',
+        'usage': {
+            'method': 'POST',
+            'url': '/api/ask',
+            'headers': {'Content-Type': 'application/json'},
+            'body': {
+                'query': 'Your medical question here',
+                'top_k': 3
+            },
+            'example': {
+                'query': 'What is the pregnancy category for acyclovir?',
+                'top_k': 3
+            }
+        },
+        'expected_response': {
+            'answer': 'string',
+            'contexts': ['string', '...']
+        }
+    }), 405
+
 @app.route('/health')
 def health():
     """Health check endpoint."""
     return jsonify({'status': 'healthy', 'message': 'Medical RAG System is running'})
+
+@app.route('/api')
+@app.route('/api/')
+def api_docs():
+    """API documentation."""
+    return jsonify({
+        'name': 'Medical RAG API',
+        'version': '1.0',
+        'description': 'AI-Powered Medical Knowledge Assistant',
+        'endpoints': {
+            '/health': {
+                'method': 'GET',
+                'description': 'Health check endpoint',
+                'response': {'status': 'string', 'message': 'string'}
+            },
+            '/api/ask': {
+                'method': 'POST',
+                'description': 'Ask a medical question',
+                'request': {
+                    'query': 'string (required)',
+                    'top_k': 'integer (optional, default: 3)'
+                },
+                'response': {
+                    'answer': 'string',
+                    'contexts': ['string', '...']
+                },
+                'example': {
+                    'curl': 'curl -X POST http://localhost:5000/api/ask -H "Content-Type: application/json" -d \'{"query":"What is acyclovir?","top_k":3}\''
+                }
+            },
+            '/api/search': {
+                'method': 'POST',
+                'description': 'Semantic search in medical knowledge base',
+                'request': {
+                    'query': 'string (required)',
+                    'top_k': 'integer (optional, default: 5)'
+                },
+                'response': {
+                    'query': 'string',
+                    'results': []
+                }
+            },
+            '/api/stats': {
+                'method': 'GET',
+                'description': 'Get system statistics',
+                'response': {
+                    'total_chunks': 'integer',
+                    'total_books': 'integer',
+                    'status': 'string'
+                }
+            }
+        }
+    })
 
 @app.route('/api/stats')
 def get_stats():
