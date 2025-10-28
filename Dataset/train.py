@@ -20,23 +20,44 @@ import pickle
 from rank_bm25 import BM25Okapi
 import re
 
-# Medical terminology expansions
+# Medical terminology expansions (MASSIVE - 95%+ MODE)
 MEDICAL_SYNONYMS = {
-    'pregnancy': ['gestation', 'gravid', 'prenatal', 'antenatal'],
-    'drug': ['medication', 'medicine', 'pharmaceutical', 'therapy'],
-    'treatment': ['therapy', 'management', 'intervention'],
-    'diagnosis': ['diagnostic', 'identified', 'detected'],
-    'patient': ['individual', 'subject', 'case'],
-    'symptom': ['signs', 'manifestation', 'clinical features'],
-    'disease': ['condition', 'disorder', 'illness', 'pathology'],
-    'infection': ['infectious', 'sepsis', 'contamination'],
-    'children': ['pediatric', 'child', 'infant', 'neonate'],
-    'adult': ['adults', 'mature'],
-    'elderly': ['geriatric', 'older', 'aged'],
-    'safe': ['safety', 'tolerated', 'well-tolerated'],
-    'effective': ['efficacy', 'effectiveness', 'successful'],
-    'dose': ['dosage', 'dosing', 'administration'],
-    'side effect': ['adverse effect', 'adverse reaction', 'toxicity'],
+    'pregnancy': ['gestation', 'gravid', 'prenatal', 'antenatal', 'maternal', 'obstetric', 'expectant'],
+    'drug': ['medication', 'medicine', 'pharmaceutical', 'therapy', 'agent', 'compound', 'preparation'],
+    'treatment': ['therapy', 'management', 'intervention', 'regimen', 'protocol', 'care', 'remedy'],
+    'diagnosis': ['diagnostic', 'identified', 'detected', 'assessment', 'evaluation', 'workup'],
+    'patient': ['individual', 'subject', 'case', 'client', 'person'],
+    'symptom': ['signs', 'manifestation', 'clinical features', 'presentation', 'indication'],
+    'disease': ['condition', 'disorder', 'illness', 'pathology', 'syndrome', 'affliction'],
+    'infection': ['infectious', 'sepsis', 'contamination', 'pathogen', 'bacterial', 'viral'],
+    'children': ['pediatric', 'child', 'infant', 'neonate', 'juvenile', 'adolescent'],
+    'adult': ['adults', 'mature', 'grown', 'grownup'],
+    'elderly': ['geriatric', 'older', 'aged', 'senior', 'old'],
+    'safe': ['safety', 'tolerated', 'well-tolerated', 'benign', 'harmless'],
+    'effective': ['efficacy', 'effectiveness', 'successful', 'beneficial', 'potent'],
+    'dose': ['dosage', 'dosing', 'administration', 'regimen', 'amount'],
+    'side effect': ['adverse effect', 'adverse reaction', 'toxicity', 'complication', 'reaction'],
+    'blood': ['hematologic', 'serum', 'plasma', 'circulation', 'hemoglobin'],
+    'heart': ['cardiac', 'cardiovascular', 'myocardial', 'coronary'],
+    'lung': ['pulmonary', 'respiratory', 'bronchial', 'alveolar'],
+    'kidney': ['renal', 'nephrology', 'nephritic'],
+    'liver': ['hepatic', 'hepatology', 'hepatocellular'],
+    'brain': ['cerebral', 'neurological', 'neural', 'cranial', 'cognitive'],
+    'cancer': ['malignancy', 'tumor', 'neoplasm', 'carcinoma', 'oncology'],
+    'pain': ['analgesia', 'discomfort', 'ache', 'painful', 'hurt'],
+    'surgery': ['surgical', 'operation', 'procedure', 'intervention', 'operative'],
+    'test': ['examination', 'diagnostic', 'screening', 'assay', 'investigation'],
+    'fever': ['pyrexia', 'febrile', 'temperature', 'hyperthermia'],
+    'inflammation': ['inflammatory', 'inflamed', 'swelling', 'edema'],
+    'antibiotics': ['antimicrobial', 'antibacterial', 'antibiotic'],
+    'virus': ['viral', 'virion', 'infectious agent'],
+    'bacteria': ['bacterial', 'microbe', 'pathogen', 'organism'],
+    'chronic': ['long-term', 'persistent', 'ongoing', 'prolonged'],
+    'acute': ['sudden', 'severe', 'immediate', 'rapid-onset'],
+    'normal': ['typical', 'standard', 'usual', 'regular', 'baseline'],
+    'abnormal': ['atypical', 'unusual', 'irregular', 'pathological'],
+    'high': ['elevated', 'increased', 'raised', 'hyper'],
+    'low': ['decreased', 'reduced', 'diminished', 'hypo'],
 }
 
 MEDICAL_ABBREVIATIONS = {
@@ -52,6 +73,24 @@ MEDICAL_ABBREVIATIONS = {
     'bid': 'twice daily',
     'tid': 'three times daily',
     'qd': 'once daily',
+    'mg': 'milligram',
+    'ml': 'milliliter',
+    'ecg': 'electrocardiogram',
+    'mri': 'magnetic resonance imaging',
+    'ct': 'computed tomography',
+    'cbc': 'complete blood count',
+    'wbc': 'white blood cell',
+    'rbc': 'red blood cell',
+    'icu': 'intensive care unit',
+    'er': 'emergency room',
+    'copd': 'chronic obstructive pulmonary disease',
+    'mi': 'myocardial infarction',
+    'cad': 'coronary artery disease',
+    'chf': 'congestive heart failure',
+    'dm': 'diabetes mellitus',
+    'htn': 'hypertension',
+    'uti': 'urinary tract infection',
+    'gi': 'gastrointestinal',
 }
 
 
@@ -199,7 +238,7 @@ class MedicalRAG:
         return [t for t in tokens if len(t) > 2]  # Remove very short tokens
     
     def _expand_query(self, query: str) -> str:
-        """Expand query with medical synonyms and abbreviations."""
+        """Expand query with medical synonyms and abbreviations - AGGRESSIVE."""
         expanded = query.lower()
         
         # Expand abbreviations
@@ -207,15 +246,23 @@ class MedicalRAG:
             if abbr in expanded.split():
                 expanded += f" {full_term}"
         
-        # Add synonyms
+        # Add synonyms - MORE AGGRESSIVE (top 3 instead of 2)
         words = expanded.split()
         expansions = []
         for word in words:
             if word in MEDICAL_SYNONYMS:
-                expansions.extend(MEDICAL_SYNONYMS[word][:2])  # Add top 2 synonyms
+                expansions.extend(MEDICAL_SYNONYMS[word][:3])  # Increased from 2 to 3
         
         if expansions:
             expanded += " " + " ".join(expansions)
+        
+        # Add partial word matches for better recall
+        for key in MEDICAL_SYNONYMS:
+            if key in expanded and key not in words:
+                expansions.extend(MEDICAL_SYNONYMS[key][:2])
+        
+        if len(expansions) > len(MEDICAL_SYNONYMS.get(words[0] if words else '', [])):
+            expanded += " " + " ".join(set(expansions[-5:]))  # Add unique recent expansions
         
         return expanded
     
@@ -266,17 +313,17 @@ class MedicalRAG:
         # Encode expanded query for semantic search
         query_embedding = self.model.encode([expanded_query], convert_to_numpy=True, normalize_embeddings=True)[0]
         
-        # Get semantic search results (using expanded query)
-        semantic_results = self._semantic_search(query_embedding, top_k * 2, min_similarity)
+        # ULTRA AGGRESSIVE: Get semantic search results (6x contexts for MAXIMUM pool - 95%+ MODE)
+        semantic_results = self._semantic_search(query_embedding, top_k * 6, min_similarity)
         
         if not hybrid or not self.bm25:
             return self._filter_and_rank(semantic_results, top_k)
         
-        # Get BM25 results (using expanded query)
-        bm25_results = self._bm25_search(expanded_query, top_k * 2)
+        # ULTRA AGGRESSIVE: Get BM25 results (6x contexts for MAXIMUM fusion)
+        bm25_results = self._bm25_search(expanded_query, top_k * 6)
         
-        # Fuse results using reciprocal rank fusion
-        fused_results = self._reciprocal_rank_fusion(semantic_results, bm25_results, top_k * 3)
+        # Fuse results using reciprocal rank fusion (MEGA pool - 8x)
+        fused_results = self._reciprocal_rank_fusion(semantic_results, bm25_results, top_k * 8)
         
         # Final filtering and ranking
         return self._filter_and_rank(fused_results, top_k)
@@ -293,8 +340,8 @@ class MedicalRAG:
             for i, embedding in enumerate(embeddings):
                 similarity = self.cosine_similarity(query_embedding, embedding)
                 
-                # Use threshold of 0.2 for maximum recall (was 0.3)
-                if similarity >= max(min_similarity, 0.2):
+                # ULTRA AGGRESSIVE: Use threshold of 0.10 for MAXIMUM recall (95%+ MODE)
+                if similarity >= max(min_similarity, 0.10):
                     # Handle different metadata formats
                     text = ''
                     if i < len(metadata):
@@ -442,7 +489,7 @@ class MedicalRAG:
         
         return "\n".join(context_parts)
     
-    def answer_question(self, question: str, top_k: int = 10, temperature: float = 0.7) -> Dict:
+    def answer_question(self, question: str, top_k: int = 15, temperature: float = 0.7) -> Dict:
         """
         Answer a medical question using RAG.
         
@@ -495,45 +542,45 @@ class MedicalRAG:
             'context': context
         }
     
-    def generate_extractive_answer(self, results: List[Dict], max_length: int = 800, question: str = "") -> str:
-        """Generate extractive answer from top results using advanced sentence scoring."""
+    def generate_extractive_answer(self, results: List[Dict], max_length: int = 1200, question: str = "") -> str:
+        """Generate extractive answer from top results using MAXIMUM AGGRESSIVE scoring."""
         import re
         
         # Extract keywords from question
         question_keywords = set()
         if question:
             # Remove question words and extract key terms
-            question_clean = re.sub(r'\b(what|when|where|who|why|how|is|are|the|a|an|of|for|in|to)\b', '', question.lower())
+            question_clean = re.sub(r'\b(what|when|where|who|why|how|is|are|the|a|an|of|for|in|to|do|does)\b', '', question.lower())
             question_keywords = set(w for w in question_clean.split() if len(w) > 3)
         
         # Collect all sentences from top results with their scores
         scored_sentences = []
         
-        for rank, result in enumerate(results[:10]):  # Use top 10 for maximum coverage
+        for rank, result in enumerate(results[:15]):  # AGGRESSIVE: Use top 15 (was 10)
             text = result['text']
             similarity = result.get('similarity', result.get('score', 0))
             
             # Split into sentences (better regex)
             sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
             
-            for sent in sentences:
+            for sent_idx, sent in enumerate(sentences):
                 sent = sent.strip()
                 if len(sent) > 25:  # Filter out too short sentences
-                    # Advanced scoring with question-awareness:
+                    # MAXIMUM AGGRESSIVE scoring:
                     # 1. Context relevance (similarity score)
                     # 2. Rank bonus (higher for earlier results)
                     # 3. Length factor (prefer medium-length sentences)
-                    # 4. Position bonus (prefer first sentences in each chunk)
-                    # 5. **NEW: Keyword match bonus**
+                    # 4. Position bonus (prefer first sentences in each chunk) - INCREASED
+                    # 5. Keyword match bonus - INCREASED
                     
                     rank_bonus = 1.0 / (rank + 1)  # Earlier results get higher bonus
-                    length_factor = min(max(len(sent) / 120, 0.5), 1.5)  # Optimal 120 chars
-                    position_bonus = 1.3 if sent == sentences[0] else 1.0  # Increased from 1.2
+                    length_factor = min(max(len(sent) / 120, 0.5), 2.0)  # ULTRA: Increased max from 1.8 to 2.0
+                    position_bonus = 2.0 if sent_idx == 0 else 1.0  # ULTRA: MAXIMUM 2.0x for first sentence
                     
-                    # NEW: Check for question keyword matches
+                    # ULTRA AGGRESSIVE: Check for question keyword matches
                     sent_lower = sent.lower()
                     keyword_matches = sum(1 for kw in question_keywords if kw in sent_lower)
-                    keyword_bonus = 1.0 + (keyword_matches * 0.3)  # +30% per keyword match
+                    keyword_bonus = 1.0 + (keyword_matches * 0.8)  # ULTRA: INCREASED from 0.5 to 0.8 (80% per match)
                     
                     score = similarity * rank_bonus * length_factor * position_bonus * keyword_bonus
                     scored_sentences.append((sent, score, rank))
@@ -554,11 +601,11 @@ class MedicalRAG:
             if sent_key in seen_content:
                 continue
             
-            # Check similarity with existing sentences
+            # Check similarity with existing sentences - ULTRA LENIENT
             is_duplicate = False
             for existing in answer_parts:
                 similarity_ratio = self._text_similarity(sent_lower, existing.lower())
-                if similarity_ratio > 0.65:  # More lenient threshold (was 0.7)
+                if similarity_ratio > 0.50:  # ULTRA: DECREASED from 0.60 to 0.50 - maximum variety
                     is_duplicate = True
                     break
             
@@ -566,7 +613,7 @@ class MedicalRAG:
                 continue
             
             if current_length + len(sent) > max_length:
-                if current_length >= 300:  # Ensure minimum answer length
+                if current_length >= 400:  # Ensure good minimum length
                     break
                 else:
                     continue  # Try to find shorter sentences
@@ -575,14 +622,14 @@ class MedicalRAG:
             seen_content.add(sent_key)
             current_length += len(sent)
             
-            if len(answer_parts) >= 7:  # Max 7 sentences for completeness (was 5)
+            if len(answer_parts) >= 12:  # ULTRA: Max 12 sentences (was 10)
                 break
         
         # Join sentences into coherent answer
         answer = " ".join(answer_parts)
         
-        # If too short, add top result as fallback
-        if len(answer) < 200 and results:
+        # If too short, add top result as fallback (ULTRA - higher minimum)
+        if len(answer) < 300 and results:  # ULTRA: Increased minimum from 250 to 300
             answer = results[0]['text'][:max_length]
         
         return answer
