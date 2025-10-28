@@ -150,7 +150,7 @@ class MedicalRAG:
     
     def search(self, query: str, top_k: int = 5, min_similarity: float = 0.0) -> List[Dict]:
         """
-        Search for relevant medical knowledge.
+        Search for relevant medical knowledge with advanced filtering.
         
         Args:
             query: Medical question or search query
@@ -174,7 +174,8 @@ class MedicalRAG:
             for i, embedding in enumerate(embeddings):
                 similarity = self.cosine_similarity(query_embedding, embedding)
                 
-                if similarity >= min_similarity:
+                # Use threshold of 0.3 for better recall
+                if similarity >= max(min_similarity, 0.3):
                     # Handle different metadata formats
                     text = ''
                     if i < len(metadata):
@@ -193,7 +194,44 @@ class MedicalRAG:
         # Sort by similarity (descending)
         all_results.sort(key=lambda x: x['similarity'], reverse=True)
         
-        return all_results[:top_k]
+        # Advanced filtering: remove very similar duplicates
+        filtered_results = []
+        seen_texts = []
+        
+        for result in all_results[:top_k * 3]:  # Process top candidates
+            # Check if similar text already included
+            is_duplicate = False
+            text_preview = result['text'][:150].lower()
+            
+            for seen_text in seen_texts:
+                if self._text_similarity(text_preview, seen_text) > 0.85:
+                    is_duplicate = True
+                    break
+            
+            if not is_duplicate:
+                filtered_results.append(result)
+                seen_texts.append(text_preview)
+                
+                if len(filtered_results) >= top_k:
+                    break
+        
+        return filtered_results
+    
+    def _text_similarity(self, text1: str, text2: str) -> float:
+        """Calculate simple text similarity for duplicate detection."""
+        if not text1 or not text2:
+            return 0.0
+        
+        words1 = set(text1.split())
+        words2 = set(text2.split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = len(words1 & words2)
+        union = len(words1 | words2)
+        
+        return intersection / union if union > 0 else 0.0
     
     def generate_context(self, results: List[Dict], max_length: int = 2000) -> str:
         """Generate context from search results for the LLM."""
@@ -271,23 +309,56 @@ class MedicalRAG:
         }
     
     def generate_extractive_answer(self, results: List[Dict], max_length: int = 500) -> str:
-        """Generate extractive answer from top results."""
+        """Generate extractive answer from top results using sentence scoring."""
+        import re
+        
+        # Collect all sentences from top results with their scores
+        scored_sentences = []
+        
+        for result in results[:5]:  # Use top 5 for better coverage
+            text = result['text']
+            similarity = result['similarity']
+            
+            # Split into sentences
+            sentences = re.split(r'(?<=[.!?])\s+', text)
+            
+            for sent in sentences:
+                sent = sent.strip()
+                if len(sent) > 20:  # Filter out too short sentences
+                    # Score based on: similarity * length factor
+                    length_factor = min(len(sent) / 100, 1.5)  # Prefer medium-length sentences
+                    score = similarity * length_factor
+                    scored_sentences.append((sent, score))
+        
+        # Sort by score and select top sentences
+        scored_sentences.sort(key=lambda x: x[1], reverse=True)
+        
+        # Build answer from top-scored sentences
         answer_parts = []
         current_length = 0
+        seen_content = set()  # Avoid duplicates
         
-        for result in results[:3]:
-            text = result['text']
+        for sent, score in scored_sentences:
+            # Check for duplicates (similar content)
+            sent_key = sent.lower()[:50]
+            if sent_key in seen_content:
+                continue
             
-            # Take first part of text
-            if current_length + len(text) > max_length:
-                remaining = max_length - current_length
-                answer_parts.append(text[:remaining] + "...")
+            if current_length + len(sent) > max_length:
                 break
             
-            answer_parts.append(text)
-            current_length += len(text)
+            answer_parts.append(sent)
+            seen_content.add(sent_key)
+            current_length += len(sent)
         
-        return "\n\n".join(answer_parts)
+        # Join sentences into coherent answer
+        answer = " ".join(answer_parts)
+        
+        # If too short, add more context
+        if len(answer) < 100 and results:
+            answer = results[0]['text'][:max_length]
+        
+        return answer
     
     def generate_llm_answer(self, question: str, context: str, temperature: float = 0.7) -> str:
         """Generate answer using configured LLM."""
