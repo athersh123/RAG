@@ -293,8 +293,8 @@ class MedicalRAG:
             for i, embedding in enumerate(embeddings):
                 similarity = self.cosine_similarity(query_embedding, embedding)
                 
-                # Use threshold of 0.3 for better recall
-                if similarity >= max(min_similarity, 0.3):
+                # Use threshold of 0.2 for maximum recall (was 0.3)
+                if similarity >= max(min_similarity, 0.2):
                     # Handle different metadata formats
                     text = ''
                     if i < len(metadata):
@@ -442,7 +442,7 @@ class MedicalRAG:
         
         return "\n".join(context_parts)
     
-    def answer_question(self, question: str, top_k: int = 7, temperature: float = 0.7) -> Dict:
+    def answer_question(self, question: str, top_k: int = 10, temperature: float = 0.7) -> Dict:
         """
         Answer a medical question using RAG.
         
@@ -486,7 +486,7 @@ class MedicalRAG:
             answer = self.generate_llm_answer(question, context, temperature)
         else:
             # Simple extraction-based answer (concatenate top results)
-            answer = self.generate_extractive_answer(results)
+            answer = self.generate_extractive_answer(results, question=question)
         
         return {
             'question': question,
@@ -495,14 +495,21 @@ class MedicalRAG:
             'context': context
         }
     
-    def generate_extractive_answer(self, results: List[Dict], max_length: int = 600) -> str:
+    def generate_extractive_answer(self, results: List[Dict], max_length: int = 800, question: str = "") -> str:
         """Generate extractive answer from top results using advanced sentence scoring."""
         import re
+        
+        # Extract keywords from question
+        question_keywords = set()
+        if question:
+            # Remove question words and extract key terms
+            question_clean = re.sub(r'\b(what|when|where|who|why|how|is|are|the|a|an|of|for|in|to)\b', '', question.lower())
+            question_keywords = set(w for w in question_clean.split() if len(w) > 3)
         
         # Collect all sentences from top results with their scores
         scored_sentences = []
         
-        for rank, result in enumerate(results[:7]):  # Use top 7 for better coverage
+        for rank, result in enumerate(results[:10]):  # Use top 10 for maximum coverage
             text = result['text']
             similarity = result.get('similarity', result.get('score', 0))
             
@@ -512,17 +519,23 @@ class MedicalRAG:
             for sent in sentences:
                 sent = sent.strip()
                 if len(sent) > 25:  # Filter out too short sentences
-                    # Advanced scoring:
+                    # Advanced scoring with question-awareness:
                     # 1. Context relevance (similarity score)
                     # 2. Rank bonus (higher for earlier results)
                     # 3. Length factor (prefer medium-length sentences)
                     # 4. Position bonus (prefer first sentences in each chunk)
+                    # 5. **NEW: Keyword match bonus**
                     
                     rank_bonus = 1.0 / (rank + 1)  # Earlier results get higher bonus
                     length_factor = min(max(len(sent) / 120, 0.5), 1.5)  # Optimal 120 chars
-                    position_bonus = 1.2 if sent == sentences[0] else 1.0
+                    position_bonus = 1.3 if sent == sentences[0] else 1.0  # Increased from 1.2
                     
-                    score = similarity * rank_bonus * length_factor * position_bonus
+                    # NEW: Check for question keyword matches
+                    sent_lower = sent.lower()
+                    keyword_matches = sum(1 for kw in question_keywords if kw in sent_lower)
+                    keyword_bonus = 1.0 + (keyword_matches * 0.3)  # +30% per keyword match
+                    
+                    score = similarity * rank_bonus * length_factor * position_bonus * keyword_bonus
                     scored_sentences.append((sent, score, rank))
         
         # Sort by score and select top sentences
@@ -545,7 +558,7 @@ class MedicalRAG:
             is_duplicate = False
             for existing in answer_parts:
                 similarity_ratio = self._text_similarity(sent_lower, existing.lower())
-                if similarity_ratio > 0.7:  # More lenient threshold
+                if similarity_ratio > 0.65:  # More lenient threshold (was 0.7)
                     is_duplicate = True
                     break
             
@@ -553,7 +566,7 @@ class MedicalRAG:
                 continue
             
             if current_length + len(sent) > max_length:
-                if current_length >= 200:  # Ensure minimum answer length
+                if current_length >= 300:  # Ensure minimum answer length
                     break
                 else:
                     continue  # Try to find shorter sentences
@@ -562,14 +575,14 @@ class MedicalRAG:
             seen_content.add(sent_key)
             current_length += len(sent)
             
-            if len(answer_parts) >= 5:  # Max 5 sentences for coherence
+            if len(answer_parts) >= 7:  # Max 7 sentences for completeness (was 5)
                 break
         
         # Join sentences into coherent answer
         answer = " ".join(answer_parts)
         
         # If too short, add top result as fallback
-        if len(answer) < 150 and results:
+        if len(answer) < 200 and results:
             answer = results[0]['text'][:max_length]
         
         return answer
