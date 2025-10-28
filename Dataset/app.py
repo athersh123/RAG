@@ -21,7 +21,7 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for cross-origin requests
 
 # Initialize RAG system
-print("🚀 Initializing Medical RAG System...")
+print(">> Initializing Medical RAG System...")
 base_dir = Path(__file__).parent.parent
 embeddings_dir = base_dir / 'Embeddings'
 
@@ -30,9 +30,9 @@ try:
         embeddings_dir=str(embeddings_dir),
         model_type='demo'
     )
-    print("✅ RAG system initialized successfully!")
+    print(">> RAG system initialized successfully!")
 except Exception as e:
-    print(f"❌ Error initializing RAG: {e}")
+    print(f"ERROR: Error initializing RAG: {e}")
     rag = None
 
 # HTML template for web interface
@@ -470,13 +470,13 @@ def health():
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🌐 Medical RAG Web Server")
+    print(">> Medical RAG Web Server")
     print("="*70)
-    print("\n📍 Local URL: http://localhost:5000")
-    print("📍 Network URL: http://0.0.0.0:5000")
-    print("\n💡 To expose via ngrok:")
+    print("\n>> Local URL: http://localhost:5000")
+    print(">> Network URL: http://0.0.0.0:5000")
+    print("\n>> To expose via ngrok:")
     print("   ngrok http 5000")
-    print("\n⏹️  Press Ctrl+C to stop")
+    print("\n>> Press Ctrl+C to stop")
     print("="*70 + "\n")
     
     app.run(host='0.0.0.0', port=5000, debug=False)
