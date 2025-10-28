@@ -19,6 +19,10 @@ PyPDF2>=3.0.0
 # Progress Bars
 tqdm>=4.65.0
 
+# Web Server (for ngrok deployment)
+flask>=3.0.0
+flask-cors>=4.0.0
+
 # Optional: LLM Integration (uncomment if needed)
 # openai>=1.0.0              # For OpenAI GPT integration
 # gpt4all>=2.0.0             # For local GPT4All models
