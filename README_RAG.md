@@ -3,6 +3,7 @@
 Your RAG model is **COMPLETE and WORKING**! ✅
 
 ## Current Status
+
 - ✅ 43,258 medical knowledge embeddings loaded
 - ✅ 9 medical textbooks indexed
 - ✅ Semantic search working perfectly
@@ -11,6 +12,7 @@ Your RAG model is **COMPLETE and WORKING**! ✅
 ## 3 Ways to Use Your RAG System:
 
 ### Option 1: **DEMO MODE** (Already Working!) ⚡
+
 No downloads, no API keys needed. Uses extractive answers from your medical textbooks.
 
 ```powershell
@@ -28,6 +30,7 @@ python train.py
 ```
 
 ### Option 2: **OpenAI API** (Best Quality) 🌟
+
 Uses GPT-4 or GPT-3.5 to generate answers. Requires API key (~$0.002 per question).
 
 ```powershell
@@ -38,6 +41,7 @@ python train.py --model-type openai --model-name gpt-3.5-turbo demo
 ```
 
 ### Option 3: **Ollama** (Free, Local, Medium Quality) 🆓
+
 When your internet is stable, install a local model:
 
 ```powershell
@@ -54,12 +58,14 @@ python train.py --model-type ollama --model-name llama3.2:1b demo
 ## Examples
 
 ### Demo Mode (No setup needed)
+
 ```powershell
 cd "d:\hack acure\Dataset"
 python train.py demo
 ```
 
 Output:
+
 ```
 ❓ Question: What is atrial fibrillation?
 🔍 Searching medical knowledge base...
@@ -74,6 +80,7 @@ Output:
 ```
 
 ### Interactive Mode
+
 ```powershell
 python train.py
 
@@ -103,6 +110,7 @@ python train.py
 **For free AI answers:** Wait for stable internet, then install Ollama models
 
 ## Your Data
+
 - **Embeddings:** 62.97 MB (43,258 chunks)
 - **Coverage:** Anatomy, Cardiology, Dentistry, Emergency Medicine, Gastrology, General Medicine, Infectious Disease, Internal Medicine, Nephrology
 - **Search Accuracy:** 100/100 (validated)

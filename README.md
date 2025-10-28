@@ -8,12 +8,14 @@ A **Retrieval-Augmented Generation (RAG)** system for medical knowledge base que
 ## 📋 Overview
 
 This RAG system enables intelligent medical question-answering by:
+
 1. **Indexing** 9 medical textbooks (~18,000 pages) across multiple specialties
 2. **Embedding** medical knowledge into 43,258 semantic vectors (384 dimensions)
 3. **Retrieving** relevant context using cosine similarity search
 4. **Generating** accurate answers with source citations
 
 ### Medical Domains Covered
+
 - 🫀 **Cardiology** - Heart and cardiovascular diseases
 - 🦷 **Dentistry** - Oral and dental health
 - 🚑 **Emergency Medicine** - Acute care and emergencies
@@ -36,6 +38,7 @@ This RAG system enables intelligent medical question-answering by:
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 ```bash
 Python 3.12+
 pip install sentence-transformers torch numpy pandas scikit-learn
@@ -44,17 +47,20 @@ pip install sentence-transformers torch numpy pandas scikit-learn
 ### Installation
 
 1. **Clone the repository**
+
 ```bash
 git clone https://github.com/athersh123/RAG.git
 cd RAG
 ```
 
 2. **Install dependencies**
+
 ```bash
 pip install -r requirements.txt
 ```
 
 3. **Generate embeddings** (if not included)
+
 ```bash
 # Place your PDF files in Dataset/ folder
 cd Dataset
@@ -62,6 +68,7 @@ python generate_embeddings.py
 ```
 
 4. **Run the RAG system**
+
 ```bash
 python train.py
 ```
@@ -69,11 +76,14 @@ python train.py
 ## 💻 Usage
 
 ### Interactive Mode
+
 ```bash
 cd Dataset
 python train.py
 ```
+
 Then type your medical questions:
+
 ```
 ❓ Your question: What is diabetic ketoacidosis?
 🔍 Searching medical knowledge base...
@@ -82,16 +92,19 @@ Then type your medical questions:
 ```
 
 ### Single Question
+
 ```bash
 python train.py question "What are the symptoms of heart failure?"
 ```
 
 ### Search Mode
+
 ```bash
 python train.py search "hypertension treatment"
 ```
 
 ### Demo Mode
+
 ```bash
 python train.py demo
 ```
@@ -113,6 +126,7 @@ Answer + Citations
 ```
 
 ### Technology Stack
+
 - **Embedding Model**: `all-MiniLM-L6-v2` (sentence-transformers)
 - **Vector Store**: NumPy arrays (43,258 × 384)
 - **Search**: Cosine similarity with scikit-learn
@@ -142,12 +156,14 @@ RAG/
 ## 🔧 Configuration
 
 ### Using OpenAI for Better Answers
+
 ```bash
 export OPENAI_API_KEY="your-api-key"
 python train.py --model-type openai --model-name gpt-3.5-turbo question "your question"
 ```
 
 ### Using Ollama (Free Local LLM)
+
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
@@ -160,6 +176,7 @@ python train.py --model-type ollama --model-name llama3.2:1b question "your ques
 ```
 
 ### Command Line Arguments
+
 - `--model-type`: `demo`, `openai`, `ollama`, `gpt4all` (default: `demo`)
 - `--model-name`: Model identifier (e.g., `gpt-3.5-turbo`, `llama3.2:1b`)
 - `--top-k`: Number of sources to retrieve (default: `3`)
@@ -167,16 +184,17 @@ python train.py --model-type ollama --model-name llama3.2:1b question "your ques
 
 ## 📈 Performance Metrics
 
-| Metric | Value |
-|--------|-------|
-| **Total Embeddings** | 43,258 chunks |
-| **Vector Dimensions** | 384 |
-| **Data Quality Score** | 90.3/100 |
-| **Embedding Accuracy** | 100/100 |
-| **Search Speed** | <1 second |
-| **Memory Usage** | ~200 MB |
+| Metric                 | Value         |
+| ---------------------- | ------------- |
+| **Total Embeddings**   | 43,258 chunks |
+| **Vector Dimensions**  | 384           |
+| **Data Quality Score** | 90.3/100      |
+| **Embedding Accuracy** | 100/100       |
+| **Search Speed**       | <1 second     |
+| **Memory Usage**       | ~200 MB       |
 
 ### Embedding Distribution by Domain
+
 - Gastrology: 33,418 chunks (77%)
 - Nephrology: 4,845 chunks (11%)
 - General Medicine: 3,083 chunks (7%)
@@ -186,6 +204,7 @@ python train.py --model-type ollama --model-name llama3.2:1b question "your ques
 ## 🎯 Example Queries
 
 ### Good Questions (High Accuracy)
+
 ✅ "What is diabetic ketoacidosis?"
 ✅ "How is pneumonia diagnosed?"
 ✅ "What are the symptoms of heart failure?"
@@ -193,6 +212,7 @@ python train.py --model-type ollama --model-name llama3.2:1b question "your ques
 ✅ "What is the treatment for acute pancreatitis?"
 
 ### Limited Questions (May Need External Knowledge)
+
 ⚠️ "What is the FDA pregnancy category for drug X?"
 ⚠️ "Latest 2025 treatment guidelines"
 ⚠️ "Compare medication A vs B efficacy studies"
@@ -217,18 +237,21 @@ python train.py --model-type ollama --model-name llama3.2:1b question "your ques
 ## 🛠️ Development
 
 ### Generate New Embeddings
+
 ```bash
 cd Dataset
 python generate_embeddings.py
 ```
 
 ### Validate Data Quality
+
 ```bash
 python validate_cleaned_data.py
 python validate_embeddings.py
 ```
 
 ### Add New Medical Textbooks
+
 1. Place PDF in `Dataset/` folder
 2. Run `python generate_embeddings.py`
 3. New embeddings will be added to `Embeddings/` folder
