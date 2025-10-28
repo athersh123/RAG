@@ -1,0 +1,169 @@
+# Medical RAG Project - Git Ignore File
+# Excludes large files and sensitive data
+
+# ============================================
+# Large Data Files (Embeddings & PDFs)
+# ============================================
+
+# Embedding files (NPY, PKL - ~63 MB total)
+Embeddings/*.npy
+Embeddings/*.pkl
+Embeddings/*.json
+
+# Source PDF files (Medical textbooks - very large)
+Dataset/*.pdf
+
+# Cleaned CSV data files (can be regenerated)
+Cleaned_Data/*.csv
+
+# ============================================
+# Python
+# ============================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# ============================================
+# IDEs and Editors
+# ============================================
+
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Spyder
+.spyderproject
+.spyproject
+
+# ============================================
+# Operating System
+# ============================================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+
+# ============================================
+# Model Files (if downloading LLM models)
+# ============================================
+
+# GPT4All models (very large .gguf files)
+*.gguf
+*.bin
+models/
+
+# Ollama cache
+.ollama/
+
+# ============================================
+# Logs and Temporary Files
+# ============================================
+
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.orig
+
+# ============================================
+# Environment Variables and Secrets
+# ============================================
+
+.env
+.env.local
+.env.*.local
+*.key
+secrets.json
+api_keys.txt
+
+# ============================================
+# Project-specific
+# ============================================
+
+# Temporary output files
+output/
+temp/
+tmp/
+
+# Downloaded model caches
+.cache/
+cache/
+
+# Test outputs
+test_output/

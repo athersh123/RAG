@@ -1,0 +1,26 @@
+# Medical RAG System - Python Dependencies
+
+# Core ML/AI Libraries
+sentence-transformers>=2.0.0
+torch>=2.0.0
+transformers>=4.30.0
+
+# Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Scientific Computing
+scikit-learn>=1.3.0
+scipy>=1.10.0
+
+# PDF Processing
+PyPDF2>=3.0.0
+
+# Progress Bars
+tqdm>=4.65.0
+
+# Optional: LLM Integration (uncomment if needed)
+# openai>=1.0.0              # For OpenAI GPT integration
+# gpt4all>=2.0.0             # For local GPT4All models
+# ollama>=0.1.0              # For Ollama integration
+# llama-cpp-python>=0.2.0    # For llama.cpp integration
