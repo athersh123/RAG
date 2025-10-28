@@ -8,6 +8,14 @@ This system:
 4. Generates accurate answer using retrieved context
 """
 import os
+import sys
+
+# Fix Windows console encoding for emojis
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 os.environ['USE_TORCH'] = '1'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TRANSFORMERS_NO_TF'] = '1'
@@ -20,16 +28,16 @@ import pickle
 from rank_bm25 import BM25Okapi
 import re
 
-# Medical terminology expansions (MASSIVE - 95%+ MODE)
+# Medical terminology expansions (MASSIVE - RELEVANCE FOCUSED)
 MEDICAL_SYNONYMS = {
     'pregnancy': ['gestation', 'gravid', 'prenatal', 'antenatal', 'maternal', 'obstetric', 'expectant'],
     'drug': ['medication', 'medicine', 'pharmaceutical', 'therapy', 'agent', 'compound', 'preparation'],
-    'treatment': ['therapy', 'management', 'intervention', 'regimen', 'protocol', 'care', 'remedy'],
-    'diagnosis': ['diagnostic', 'identified', 'detected', 'assessment', 'evaluation', 'workup'],
+    'treatment': ['therapy', 'management', 'intervention', 'regimen', 'protocol', 'care', 'remedy', 'treat'],
+    'diagnosis': ['diagnostic', 'identified', 'detected', 'assessment', 'evaluation', 'workup', 'diagnose'],
     'patient': ['individual', 'subject', 'case', 'client', 'person'],
-    'symptom': ['signs', 'manifestation', 'clinical features', 'presentation', 'indication'],
+    'symptom': ['signs', 'manifestation', 'clinical features', 'presentation', 'indication', 'symptoms'],
     'disease': ['condition', 'disorder', 'illness', 'pathology', 'syndrome', 'affliction'],
-    'infection': ['infectious', 'sepsis', 'contamination', 'pathogen', 'bacterial', 'viral'],
+    'infection': ['infectious', 'sepsis', 'contamination', 'pathogen', 'bacterial', 'viral', 'infected'],
     'children': ['pediatric', 'child', 'infant', 'neonate', 'juvenile', 'adolescent'],
     'adult': ['adults', 'mature', 'grown', 'grownup'],
     'elderly': ['geriatric', 'older', 'aged', 'senior', 'old'],
@@ -58,6 +66,13 @@ MEDICAL_SYNONYMS = {
     'abnormal': ['atypical', 'unusual', 'irregular', 'pathological'],
     'high': ['elevated', 'increased', 'raised', 'hyper'],
     'low': ['decreased', 'reduced', 'diminished', 'hypo'],
+    'diabetes': ['diabetic', 'hyperglycemia', 'glucose'],
+    'hypertension': ['high blood pressure', 'elevated blood pressure', 'HTN', 'hypertensive'],
+    'tuberculosis': ['TB', 'mycobacterium', 'tuberculous', 'tubercular'],
+    'pneumonia': ['pneumonitis', 'lung infection', 'pulmonary infection'],
+    'sepsis': ['septic', 'bloodstream infection', 'septicemia'],
+    'booster': ['vaccination', 'immunization', 'vaccine', 'dose'],
+    'category': ['class', 'classification', 'rating', 'grade'],
 }
 
 MEDICAL_ABBREVIATIONS = {
@@ -91,6 +106,8 @@ MEDICAL_ABBREVIATIONS = {
     'htn': 'hypertension',
     'uti': 'urinary tract infection',
     'gi': 'gastrointestinal',
+    'tdap': 'tetanus diphtheria pertussis',
+    'dtap': 'diphtheria tetanus pertussis',
 }
 
 
@@ -313,17 +330,17 @@ class MedicalRAG:
         # Encode expanded query for semantic search
         query_embedding = self.model.encode([expanded_query], convert_to_numpy=True, normalize_embeddings=True)[0]
         
-        # ULTRA AGGRESSIVE: Get semantic search results (6x contexts for MAXIMUM pool - 95%+ MODE)
-        semantic_results = self._semantic_search(query_embedding, top_k * 6, min_similarity)
+        # BALANCED AGGRESSIVE: Get semantic search results (4x contexts for good pool)
+        semantic_results = self._semantic_search(query_embedding, top_k * 4, min_similarity)
         
         if not hybrid or not self.bm25:
             return self._filter_and_rank(semantic_results, top_k)
         
-        # ULTRA AGGRESSIVE: Get BM25 results (6x contexts for MAXIMUM fusion)
-        bm25_results = self._bm25_search(expanded_query, top_k * 6)
+        # BALANCED AGGRESSIVE: Get BM25 results (4x contexts for good fusion)
+        bm25_results = self._bm25_search(expanded_query, top_k * 4)
         
-        # Fuse results using reciprocal rank fusion (MEGA pool - 8x)
-        fused_results = self._reciprocal_rank_fusion(semantic_results, bm25_results, top_k * 8)
+        # Fuse results using reciprocal rank fusion (balanced pool - 5x)
+        fused_results = self._reciprocal_rank_fusion(semantic_results, bm25_results, top_k * 5)
         
         # Final filtering and ranking
         return self._filter_and_rank(fused_results, top_k)
@@ -340,8 +357,8 @@ class MedicalRAG:
             for i, embedding in enumerate(embeddings):
                 similarity = self.cosine_similarity(query_embedding, embedding)
                 
-                # ULTRA AGGRESSIVE: Use threshold of 0.10 for MAXIMUM recall (95%+ MODE)
-                if similarity >= max(min_similarity, 0.10):
+                # BALANCED: Use threshold of 0.25 for RELEVANT recall (quality over quantity)
+                if similarity >= max(min_similarity, 0.25):
                     # Handle different metadata formats
                     text = ''
                     if i < len(metadata):
@@ -553,10 +570,24 @@ class MedicalRAG:
             question_clean = re.sub(r'\b(what|when|where|who|why|how|is|are|the|a|an|of|for|in|to|do|does)\b', '', question.lower())
             question_keywords = set(w for w in question_clean.split() if len(w) > 3)
         
-        # Collect all sentences from top results with their scores
+        # CRITICAL: Pre-filter contexts to ensure they're actually relevant to the question
+        relevant_results = []
+        for result in results[:20]:
+            text_lower = result['text'].lower()
+            # Count keyword matches in this context
+            keyword_count = sum(1 for kw in question_keywords if kw in text_lower)
+            # Must have at least 2 keywords OR if very few keywords, at least 1
+            if keyword_count >= max(2, len(question_keywords) // 2):
+                relevant_results.append(result)
+        
+        # Fallback if no relevant contexts found
+        if not relevant_results:
+            relevant_results = results[:5]
+        
+        # Collect all sentences from relevant contexts with their scores
         scored_sentences = []
         
-        for rank, result in enumerate(results[:15]):  # AGGRESSIVE: Use top 15 (was 10)
+        for rank, result in enumerate(relevant_results[:12]):  # Use top 12 RELEVANT results
             text = result['text']
             similarity = result.get('similarity', result.get('score', 0))
             
@@ -566,21 +597,21 @@ class MedicalRAG:
             for sent_idx, sent in enumerate(sentences):
                 sent = sent.strip()
                 if len(sent) > 25:  # Filter out too short sentences
-                    # MAXIMUM AGGRESSIVE scoring:
+                    # RELEVANCE-FOCUSED scoring:
                     # 1. Context relevance (similarity score)
                     # 2. Rank bonus (higher for earlier results)
                     # 3. Length factor (prefer medium-length sentences)
-                    # 4. Position bonus (prefer first sentences in each chunk) - INCREASED
-                    # 5. Keyword match bonus - INCREASED
+                    # 4. Position bonus (prefer first sentences in each chunk)
+                    # 5. Keyword match bonus - CRITICAL for relevance
                     
                     rank_bonus = 1.0 / (rank + 1)  # Earlier results get higher bonus
-                    length_factor = min(max(len(sent) / 120, 0.5), 2.0)  # ULTRA: Increased max from 1.8 to 2.0
-                    position_bonus = 2.0 if sent_idx == 0 else 1.0  # ULTRA: MAXIMUM 2.0x for first sentence
+                    length_factor = min(max(len(sent) / 120, 0.5), 1.5)  # BALANCED: Moderate length preference
+                    position_bonus = 1.8 if sent_idx == 0 else 1.0  # STRONG: 1.8x for first sentence
                     
-                    # ULTRA AGGRESSIVE: Check for question keyword matches
+                    # CRITICAL: Check for question keyword matches - MAXIMUM weight for relevance
                     sent_lower = sent.lower()
                     keyword_matches = sum(1 for kw in question_keywords if kw in sent_lower)
-                    keyword_bonus = 1.0 + (keyword_matches * 0.8)  # ULTRA: INCREASED from 0.5 to 0.8 (80% per match)
+                    keyword_bonus = 1.0 + (keyword_matches * 1.2)  # CRITICAL: 120% boost per keyword for direct relevance
                     
                     score = similarity * rank_bonus * length_factor * position_bonus * keyword_bonus
                     scored_sentences.append((sent, score, rank))
@@ -601,11 +632,11 @@ class MedicalRAG:
             if sent_key in seen_content:
                 continue
             
-            # Check similarity with existing sentences - ULTRA LENIENT
+            # Check similarity with existing sentences - MODERATE
             is_duplicate = False
             for existing in answer_parts:
                 similarity_ratio = self._text_similarity(sent_lower, existing.lower())
-                if similarity_ratio > 0.50:  # ULTRA: DECREASED from 0.60 to 0.50 - maximum variety
+                if similarity_ratio > 0.65:  # BALANCED: Avoid near-duplicates but allow some variety
                     is_duplicate = True
                     break
             
@@ -622,15 +653,33 @@ class MedicalRAG:
             seen_content.add(sent_key)
             current_length += len(sent)
             
-            if len(answer_parts) >= 12:  # ULTRA: Max 12 sentences (was 10)
+            if len(answer_parts) >= 8:  # FOCUSED: Max 8 sentences for conciseness
                 break
         
         # Join sentences into coherent answer
         answer = " ".join(answer_parts)
         
-        # If too short, add top result as fallback (ULTRA - higher minimum)
-        if len(answer) < 300 and results:  # ULTRA: Increased minimum from 250 to 300
-            answer = results[0]['text'][:max_length]
+        # CRITICAL: Relevance validation - ensure answer actually addresses the question
+        if question_keywords:
+            answer_lower = answer.lower()
+            keywords_in_answer = sum(1 for kw in question_keywords if kw in answer_lower)
+            
+            # If answer doesn't contain enough question keywords, try to improve it
+            if keywords_in_answer < len(question_keywords) // 2:
+                # Try to find sentences that DO contain the keywords
+                for sent, score, rank in scored_sentences:
+                    sent_lower = sent.lower()
+                    sent_keywords = sum(1 for kw in question_keywords if kw in sent_lower)
+                    
+                    # If this sentence has more keywords, use it
+                    if sent_keywords > keywords_in_answer and sent not in answer:
+                        if len(answer) + len(sent) <= max_length:
+                            answer = sent + " " + answer
+                            break
+        
+        # If too short, add top result as fallback
+        if len(answer) < 200 and relevant_results:  # BALANCED: Reasonable minimum
+            answer = relevant_results[0]['text'][:max_length]
         
         return answer
     
