@@ -175,10 +175,16 @@ class MedicalRAG:
                 similarity = self.cosine_similarity(query_embedding, embedding)
                 
                 if similarity >= min_similarity:
+                    # Handle different metadata formats
+                    text = ''
+                    if i < len(metadata):
+                        # Try different field names
+                        text = metadata[i].get('text', metadata[i].get('chunk_text', ''))
+                    
                     result = {
                         'book': book_name,
                         'similarity': float(similarity),
-                        'text': metadata[i]['chunk_text'] if i < len(metadata) else '',
+                        'text': text,
                         'paragraph_id': metadata[i].get('paragraph_id', i) if i < len(metadata) else i,
                         'chunk_index': i
                     }
