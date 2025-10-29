@@ -71,8 +71,17 @@ MEDICAL_SYNONYMS = {
     'tuberculosis': ['TB', 'mycobacterium', 'tuberculous', 'tubercular'],
     'pneumonia': ['pneumonitis', 'lung infection', 'pulmonary infection'],
     'sepsis': ['septic', 'bloodstream infection', 'septicemia'],
-    'booster': ['vaccination', 'immunization', 'vaccine', 'dose'],
+    'booster': ['vaccination', 'immunization', 'vaccine', 'dose', 'revaccination'],
     'category': ['class', 'classification', 'rating', 'grade'],
+    'tdap': ['tetanus', 'diphtheria', 'pertussis', 'dtp', 'dtap', 'td', 'booster'],
+    'schedule': ['timing', 'when', 'frequency', 'interval', 'regimen', 'dosing'],
+    'give': ['administer', 'administered', 'administration', 'dose', 'dosing'],
+    'warfarin': ['coumadin', 'anticoagulant', 'blood thinner'],
+    'acyclovir': ['zovirax', 'antiviral'],
+    'appendicitis': ['appendix', 'appendectomy', 'acute abdomen'],
+    'attack': ['infarction', 'ischemia', 'acute', 'event'],
+    'level': ['value', 'concentration', 'measurement', 'range'],
+    'transmitted': ['transmission', 'spread', 'transfer', 'infection', 'contagious'],
 }
 
 MEDICAL_ABBREVIATIONS = {
@@ -359,8 +368,8 @@ class MedicalRAG:
             for i, embedding in enumerate(embeddings):
                 similarity = self.cosine_similarity(query_embedding, embedding)
                 
-                # BALANCED: Use threshold of 0.25 for RELEVANT recall (quality over quantity)
-                if similarity >= max(min_similarity, 0.25):
+                # BALANCED: Use threshold of 0.25 for BETTER COVERAGE while maintaining quality
+                if similarity >= max(min_similarity, 0.25):  # Lowered from 0.30 for more contexts
                     # Handle different metadata formats
                     text = ''
                     if i < len(metadata):
@@ -508,13 +517,13 @@ class MedicalRAG:
         
         return "\n".join(context_parts)
     
-    def answer_question(self, question: str, top_k: int = 18, temperature: float = 0.7) -> Dict:
+    def answer_question(self, question: str, top_k: int = 8, temperature: float = 0.7) -> Dict:
         """
         Answer a medical question using RAG.
         
         Args:
             question: Medical question
-            top_k: Number of context chunks to retrieve
+            top_k: Number of context chunks to retrieve (increased to 8 for better coverage)
             temperature: Temperature for answer generation
             
         Returns:
@@ -561,7 +570,7 @@ class MedicalRAG:
             'context': context
         }
     
-    def generate_extractive_answer(self, results: List[Dict], max_length: int = 1200, question: str = "") -> str:
+    def generate_extractive_answer(self, results: List[Dict], max_length: int = 800, question: str = "") -> str:
         """Generate extractive answer with MAXIMUM RELEVANCE FOCUS and DIRECT ANSWERING."""
         import re
         
@@ -572,7 +581,8 @@ class MedicalRAG:
         is_treatment = any(word in question_lower for word in ['treat', 'treatment', 'therapy', 'manage'])
         is_side_effects = any(phrase in question_lower for phrase in ['side effect', 'adverse', 'complication'])
         is_how = question_lower.startswith('how')
-        is_when = question_lower.startswith('when')
+        is_when = question_lower.startswith('when') or any(word in question_lower for word in ['timing', 'schedule', 'frequency'])
+        is_timing = is_when  # Timing questions need special handling
         
         # Extract keywords from question - MORE AGGRESSIVE
         question_keywords = set()
@@ -592,7 +602,7 @@ class MedicalRAG:
         
         # CRITICAL: Pre-filter contexts - PRIORITIZE by question type
         relevant_results = []
-        for result in results[:25]:  # Check more results
+        for result in results[:40]:  # Check MORE results for better coverage (was 30)
             text = result['text']
             text_lower = text.lower()
             
@@ -627,16 +637,22 @@ class MedicalRAG:
             if is_side_effects and any(phrase in text_lower for phrase in ['side effect', 'adverse', 'complication', 'toxicity']):
                 side_effect_boost = 1.5
             
-            # STRICT: Must have medical entities OR at least 3 keywords
-            if entity_count > 0 or keyword_count >= 3:
+            # BOOST for timing/schedule questions
+            timing_boost = 0
+            if is_timing and any(phrase in text_lower for phrase in ['every', 'weekly', 'monthly', 'yearly', 'daily', 'dose', 'booster', 'schedule', 'interval', 'q10', 'q 10']):
+                timing_boost = 2.0  # Strong boost for schedule info!
+            
+            # STRICT: Must have medical entities OR at least 2 keywords (lowered from 3)
+            if entity_count > 0 or keyword_count >= 2:
                 # Calculate comprehensive relevance boost
                 result['relevance_boost'] = (1.0 + 
-                    (entity_count * 0.5) + 
-                    (keyword_count * 0.1) + 
+                    (entity_count * 1.0) +  # Increased from 0.5 - entities are critical!
+                    (keyword_count * 0.2) +  # Increased from 0.1 - keywords matter!
                     definition_boost + 
                     symptom_boost + 
                     treatment_boost +
-                    side_effect_boost)
+                    side_effect_boost +
+                    timing_boost)  # Added timing boost!
                 relevant_results.append(result)
         
         # If no relevant results, lower the bar
@@ -686,25 +702,37 @@ class MedicalRAG:
                     keyword_matches = sum(1 for kw in question_keywords if kw in sent_lower)
                     entity_matches = sum(1 for entity in medical_entities if entity in sent_lower)
                     
+                    # Filter out completely irrelevant sentences, BUT be lenient
+                    # Only skip if sentence has NO relevance indicators at all
+                    has_question_words = any(word in sent_lower for word in ['what', 'when', 'how', 'why', 'where'])
+                    has_medical_terms = any(word in sent_lower for word in ['patient', 'treatment', 'therapy', 'disease', 'condition', 'symptom', 'drug', 'medication', 'diagnosis'])
+                    
+                    # Only skip if it's truly irrelevant (no keywords, entities, OR medical context)
+                    if keyword_matches == 0 and entity_matches == 0 and not has_medical_terms and len(sent) < 50:
+                        continue  # Skip only very short irrelevant sentences
+                    
                     # MEGA BOOST for definition/explanation patterns
                     definition_bonus = 1.0
                     if is_what_is and entity_matches > 0:
                         # Sentences that DEFINE things get massive boost
                         if any(pattern in sent_lower for pattern in [' is ', ' are ', ' refers to', ' defined as', ' means ', ' characterized by', ':']):
-                            definition_bonus = 3.0  # Triple score for definitions!
+                            definition_bonus = 5.0  # QUINTUPLED for definitions!
                     
                     # BOOST for direct answer patterns
-                    if is_symptoms and any(word in sent_lower for word in ['symptom', 'include', 'present', 'manifest']):
-                        definition_bonus = max(definition_bonus, 2.0)
+                    if is_symptoms and any(word in sent_lower for word in ['symptom', 'include', 'present', 'manifest', 'sign']):
+                        definition_bonus = max(definition_bonus, 3.0)
                     
-                    if is_treatment and any(word in sent_lower for word in ['treatment', 'therapy', 'recommend', 'administer']):
-                        definition_bonus = max(definition_bonus, 2.0)
+                    if is_treatment and any(word in sent_lower for word in ['treatment', 'therapy', 'recommend', 'administer', 'manage', 'treat']):
+                        definition_bonus = max(definition_bonus, 3.0)
                     
-                    if is_side_effects and any(phrase in sent_lower for phrase in ['side effect', 'adverse', 'complication']):
-                        definition_bonus = max(definition_bonus, 2.0)
+                    if is_side_effects and any(phrase in sent_lower for phrase in ['side effect', 'adverse', 'complication', 'toxicity', 'risk']):
+                        definition_bonus = max(definition_bonus, 3.0)
+                    
+                    if is_timing and any(word in sent_lower for word in ['every', 'booster', 'dose', 'schedule', 'interval', 'year', 'month', 'week', 'day']):
+                        definition_bonus = max(definition_bonus, 3.0)
                     
                     # ULTRA BOOST for medical entities (drug names, conditions, etc.)
-                    keyword_bonus = 1.0 + (keyword_matches * 1.5) + (entity_matches * 2.0)  # MASSIVE: 150% per keyword, 200% per entity
+                    keyword_bonus = 1.0 + (keyword_matches * 2.0) + (entity_matches * 3.0)  # MASSIVE: 200% per keyword, 300% per entity
                     
                     # Combined score with definition boost
                     score = similarity * rank_bonus * length_factor * position_bonus * keyword_bonus * definition_bonus
@@ -738,7 +766,7 @@ class MedicalRAG:
                 continue
             
             if current_length + len(sent) > max_length:
-                if current_length >= 400:  # Ensure good minimum length
+                if current_length >= 300:  # Concise minimum for quality
                     break
                 else:
                     continue  # Try to find shorter sentences
@@ -747,7 +775,7 @@ class MedicalRAG:
             seen_content.add(sent_key)
             current_length += len(sent)
             
-            if len(answer_parts) >= 8:  # FOCUSED: Max 8 sentences for conciseness
+            if len(answer_parts) >= 5:  # CONCISE: Max 5 sentences for clarity and faithfulness
                 break
         
         # Join sentences into coherent answer
@@ -759,34 +787,50 @@ class MedicalRAG:
             keywords_in_answer = sum(1 for kw in question_keywords if kw in answer_lower)
             entities_in_answer = sum(1 for entity in medical_entities if entity in answer_lower)
             
-            # STRICT: Must have medical entities in answer if they were in question
+            # ULTRA STRICT: Must have medical entities in answer if they were in question
             if medical_entities and entities_in_answer == 0:
-                # Try to find sentences with entities
+                # Find BEST sentence with entities
                 for sent, score, rank in scored_sentences:
                     sent_lower = sent.lower()
                     sent_entities = sum(1 for entity in medical_entities if entity in sent_lower)
                     
-                    if sent_entities > 0 and sent not in answer:
-                        # Prepend this critical sentence
-                        if len(sent) + len(answer) <= max_length:
-                            answer = sent + " " + answer
-                        else:
-                            # Replace answer if it doesn't have entities
-                            answer = sent
+                    if sent_entities > 0:
+                        # REPLACE answer with entity-containing sentence
+                        answer = sent
+                        current_length = len(sent)
+                        
+                        # Add more relevant sentences
+                        for sent2, score2, rank2 in scored_sentences:
+                            if sent2 != sent and current_length + len(sent2) <= max_length:
+                                sent2_lower = sent2.lower()
+                                if sum(1 for kw in question_keywords if kw in sent2_lower) > 0:
+                                    answer += " " + sent2
+                                    current_length += len(sent2)
                         break
             
-            # If still low keyword coverage, try to improve
+            # STRICT: Must have at least HALF the keywords in answer
             elif keywords_in_answer < len(question_keywords) // 2:
+                # Rebuild answer with keyword-rich sentences
+                new_answer_parts = []
+                new_length = 0
+                
                 for sent, score, rank in scored_sentences:
                     sent_lower = sent.lower()
                     sent_keywords = sum(1 for kw in question_keywords if kw in sent_lower)
+                    sent_entities = sum(1 for entity in medical_entities if entity in sent_lower)
                     
-                    if sent_keywords > keywords_in_answer and sent not in answer:
-                        if len(answer) + len(sent) <= max_length:
-                            answer = sent + " " + answer
+                    # Prioritize sentences with keywords AND entities
+                    if (sent_keywords > 0 or sent_entities > 0) and new_length + len(sent) <= max_length:
+                        new_answer_parts.append(sent)
+                        new_length += len(sent)
+                        
+                        if len(new_answer_parts) >= 5:
                             break
+                
+                if new_answer_parts:
+                    answer = " ".join(new_answer_parts)
         
-        # If too short, add top relevant result as fallback
+        # If STILL too short, add top relevant result as fallback
         if len(answer) < 200 and relevant_results:
             answer = relevant_results[0]['text'][:max_length]
         
